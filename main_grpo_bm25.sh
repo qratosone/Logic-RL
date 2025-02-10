@@ -1,19 +1,19 @@
 set -x
 MODEL_PATH_BASE=/home/qinxubo/data/pretrained_models/
-MODEL_NAME=Qwen2.5-0.5B-Instruct
+MODEL_NAME=Qwen2.5-7B-Instruct
 MODEL_PATH=$MODEL_PATH_BASE$MODEL_NAME
-TRAIN_DATA=/home/qinxubo/data/reasoning_ranker/Logic-RL/data/kk/instruct/5ppl/train.parquet
-TEST_DATA=/home/qinxubo/data/reasoning_ranker/Logic-RL/data/kk/instruct/5ppl/test.parquet
+TRAIN_DATA=/home/qinxubo/data/reasoning_ranker/Logic-RL/data/bm25_eval/biology/train.parquet
+TEST_DATA=/home/qinxubo/data/reasoning_ranker/Logic-RL/data/bm25_eval/biology/test.parquet
 export CUDA_VISIBLE_DEVICES=3,4,6,7
 export VLLM_ATTENTION_BACKEND=XFORMERS
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files=$TRAIN_DATA \
     data.val_files=$TEST_DATA \
-    data.train_batch_size=8 \
+    data.train_batch_size=4 \
     data.val_batch_size=8 \
-    data.max_prompt_length=400 \
-    data.max_response_length=2048 \
+    data.max_prompt_length=1000 \
+    data.max_response_length=500 \
     actor_rollout_ref.model.path=$MODEL_PATH\
     actor_rollout_ref.actor.optim.lr=3e-7 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -36,7 +36,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
     trainer.logger=['wandb'] \
-    trainer.project_name='GRPO_logic_KK' \
+    trainer.project_name='GRPO_BRIGHT_biology_bm25' \
     trainer.experiment_name=$MODEL_NAME \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
