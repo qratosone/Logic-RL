@@ -37,24 +37,22 @@ if __name__ == '__main__':
 
     datasets_full_train=[]
     datasets_full_test=[]
-    #data_source = load_dataset('xlangai/bright', 'examples',cache_dir=args.cache_dir)[args.task]
+    #data_source = load_dataset('BRIGHT/', 'examples',cache_dir=args.cache_dir)[args.task]
     for TARGET in ['biology','earth_science','economics','pony','psychology','robotics',
                                  'stackoverflow','sustainable_living','aops','leetcode','theoremqa_theorems',
                                  'theoremqa_questions']:
-        dataset = datasets.load_dataset('xlangai/bright', 'examples',cache_dir='cache')[TARGET]
-        doc_pairs = datasets.load_dataset('xlangai/bright', 'documents',cache_dir='cache')[TARGET]
+        dataset = datasets.load_dataset('BRIGHT/', 'examples',cache_dir='cache')[TARGET]
+        doc_pairs = datasets.load_dataset('BRIGHT/', 'documents',cache_dir='cache')[TARGET]
         doc_ids = []
         documents = []
         for dp in doc_pairs:
             doc_ids.append(dp['id'])
             documents.append(dp['content'])
-
+        dataset=dataset.filter(lambda example: len(example['query']) >= 6000)
         train_dataset = dataset
         test_dataset = dataset
 
-        instruction_following = "Let's think step by step and output the final answer after \"<query>\"."
-
-        # add a row to each data item that represents a unique id
+        #instruction_following = "Let's think step by step and output the final answer after \"<query>\"."
         def make_map_fn(split):
 
             def process_fn(example, idx):
@@ -63,7 +61,7 @@ if __name__ == '__main__':
                 excluded_ids=example['excluded_ids']
                 gold_ids=example['gold_ids']
                 assert len(set(excluded_ids).intersection(gold_ids))==0
-                question = query + ' ' + instruction_following
+                question = f"""<|im_start|>system\nYou are a helpful assistant. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and<answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>.  Now the user asks you to generate a query with the given question. The query will be used for text retrieval to retrieve the correct to the query. After thinking, when you finally reach a conclusion, clearly state the identity of each character within <answer> </answer> tags. i.e., <answer> The query content </answer>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
                 solution = {
                     "qrels":{qid:{}}
                 }
@@ -95,7 +93,9 @@ if __name__ == '__main__':
 
             return process_fn
 
+
         train_dataset = train_dataset.map(function=make_map_fn('train'), with_indices=True)
+        #import pdb;pdb.set_trace()
         datasets_full_train.append(train_dataset)
         test_dataset = test_dataset.map(function=make_map_fn('test'), with_indices=True)
         datasets_full_test.append(test_dataset)

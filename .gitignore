@@ -107,7 +107,7 @@ ENV/
 
 # Mac
 .DS_Store
-
+BRIGHT/
 # output logs
 tests/e2e/toy_examples/deepspeed/synchronous/output.txt
 

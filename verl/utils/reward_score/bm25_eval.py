@@ -21,9 +21,8 @@ import datasets
 import pytrec_eval
 class BM25_Retriever:
     def __init__(self,target=''):
-        print("init bm25 retriever:",target)
         self.analyzer=analysis.Analyzer(analysis.get_lucene_analyzer())
-        doc_pairs = datasets.load_dataset('xlangai/bright', 'documents',cache_dir='cache')[target]
+        doc_pairs = datasets.load_dataset('BRIGHT/', 'documents',cache_dir='cache')[target]
         self.doc_ids = []
         self.documents = []
         for dp in doc_pairs:
@@ -34,7 +33,7 @@ class BM25_Retriever:
         self.model = LuceneBM25Model(dictionary=self.dictionary, k1=0.9, b=0.4)
         bm25_corpus = self.model[list(map(self.dictionary.doc2bow, corpus))]
         self.bm25_index = SparseMatrixSimilarity(bm25_corpus, num_docs=len(corpus), num_terms=len(self.dictionary), normalize_queries=False, normalize_documents=False)
-        examples = datasets.load_dataset('xlangai/bright', 'examples',cache_dir='cache')[target]
+        examples = datasets.load_dataset('BRIGHT/', 'examples',cache_dir='cache')[target]
         self.excluded_ids = {}
         for e in examples:
             self.excluded_ids[e['id']] = e['excluded_ids']
@@ -68,9 +67,49 @@ class Retriever_Full:
     def retrieval_bm25_with_reasoner(self,query_id,query,data_source):
         return self.retriever_map[data_source].retrieval_bm25_with_reasoner(query_id,query)
 retriever_full=Retriever_Full()
+def validate_response_structure(processed_str: str) -> bool:
+    """Performs comprehensive validation of response structure.
+    
+    Args:
+        processed_str: Processed response string from the model
+        
+    Returns:
+        Boolean indicating whether all formatting requirements are met
+    """
+    print("\n[Structure Validation]")
+    validation_passed = True
 
+    # Check required tags
+    tags = {
+        'think_start': ('<think>', 1),
+        'think_end': ('</think>', 1),
+        'answer_start': ('<answer>', 1),
+        'answer_end': ('</answer>', 1)
+    }
 
-def compute_score(solution_str, ground_truth, data_source):
+    positions = {}
+    for tag_name, (tag_str, expected_count) in tags.items():
+        count = processed_str.count(tag_str)
+        positions[tag_name] = pos = processed_str.find(tag_str)
+        
+        print(f"  {tag_str}: count={count}, position={pos}")
+        
+        if count != expected_count:
+            print(f"  [Error] {tag_str} appears {count} times (expected {expected_count})")
+            validation_passed = False
+
+    # Verify tag order
+    if (positions['think_start'] > positions['think_end'] or
+        positions['think_end'] > positions['answer_start'] or
+        positions['answer_start'] > positions['answer_end']):
+        print("  [Error] Incorrect tag order: Expected <think>...</think><answer>...</answer>")
+        validation_passed = False
+    else:
+        print("  Tag sequence validation passed")
+
+    return validation_passed
+
+def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     """The scoring function for GSM8k.
 
     Reference: Trung, Luong, et al. "Reft: Reasoning with reinforced fine-tuning." Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers). 2024.
@@ -82,28 +121,17 @@ def compute_score(solution_str, ground_truth, data_source):
         format_score: the score for the format
         score: the score for the correct answer
     """
-    if '<|endoftext|>' in solution_str:
-        solution_str=solution_str.strip('<|endoftext|>')
-    #print(solution_str)
-    results_output=solution_str.split('<query>')
-    punish_flag=False
-    
-    
-    actual_length=1
-    if len(results_output)>=2:
-        reasoned_query="".join(results_output[1:])
-        actual_length=len(results_output[1:])
-        
+    format_correct = validate_response_structure(solution_str)
+    format_score = format_reward if format_correct else -abs(format_reward)
+    print(f"\n  Format validation: {'PASS' if format_correct else 'FAIL'}")
+    print(f"  Format score: {format_score}")
+    #if not format_correct:
+    #    return format_score
+    if '<answer>' not in solution_str:
+        results_output=solution_str
     else:
-        reasoned_query=results_output[0]
-        print("No actual queries")
-        print("------")
-        punish_flag=True
-    print(reasoned_query)
-    
-    qrels=ground_truth['qrels']
-    qrels=json.loads(qrels)
-    #print(qrels)
+        results_output=solution_str.split('<answer>')[1].strip('</answer>')[0]
+    qrels=json.loads(ground_truth)['qrels']
     qrels_filtered={}
     for qid in qrels:
         if qrels[qid] is not None:
@@ -112,17 +140,16 @@ def compute_score(solution_str, ground_truth, data_source):
         for doc in qrels_filtered[qid]:
             qrels_filtered[qid][doc]=int(qrels_filtered[qid][doc])
     assert len(qrels_filtered)==1
-    #print(qrels_filtered)
     evaluator=pytrec_eval.RelevanceEvaluator(qrels_filtered,["ndcg_cut.10"])
     #answer = extract_solution(solution_str=solution_str, method=method)
     full_metrics=0
-    retriever=retriever_full[data_source]
+    retriever=retriever_full.retriever_map[data_source]
     for qid in qrels_filtered:
-        results=retriever.retrieval_bm25_with_reasoner(qid,reasoned_query)
+        results=retriever.retrieval_bm25_with_reasoner(qid,results_output)
         scores=evaluator.evaluate(results)
         full_metrics+=scores[qid]['ndcg_cut_10']
-    if punish_flag:
-        full_metrics/=10
-    full_metrics/=actual_length
+    full_metrics/=len(results_output)
     print('ndcg@10:',full_metrics)
-    return full_metrics/len(qrels)
+    print("Actual metrics:",full_metrics)
+    print(results_output)
+    return full_metrics/len(qrels)+format_score
