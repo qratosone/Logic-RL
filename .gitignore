@@ -79,10 +79,10 @@ docs/_build/
 
 # PyBuilder
 target/
-
+save_models/
 # IPython Notebook
 .ipynb_checkpoints
-
+data/
 # pyenv
 .python-version
 

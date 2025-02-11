@@ -18,14 +18,16 @@ Preprocess the GSM8k dataset to parquet format
 import re
 import os
 import datasets
-
+from datasets import concatenate_datasets
 from verl.utils.hdfs_io import copy, makedirs
 import argparse
 from tqdm import tqdm
 import pytrec_eval
+'''
 
+                                 '''
 
-
+import json
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_dir', default='data/bm25_eval')
@@ -33,70 +35,78 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    num_few_shot = 5
+    datasets_full_train=[]
+    datasets_full_test=[]
     #data_source = load_dataset('xlangai/bright', 'examples',cache_dir=args.cache_dir)[args.task]
-    TARGET='biology'
-    dataset = datasets.load_dataset('xlangai/bright', 'examples',cache_dir='cache')[TARGET]
-    doc_pairs = datasets.load_dataset('xlangai/bright', 'documents',cache_dir='cache')[TARGET]
-    doc_ids = []
-    documents = []
-    for dp in doc_pairs:
-        doc_ids.append(dp['id'])
-        documents.append(dp['content'])
+    for TARGET in ['biology','earth_science','economics','pony','psychology','robotics',
+                                 'stackoverflow','sustainable_living','aops','leetcode','theoremqa_theorems',
+                                 'theoremqa_questions']:
+        dataset = datasets.load_dataset('xlangai/bright', 'examples',cache_dir='cache')[TARGET]
+        doc_pairs = datasets.load_dataset('xlangai/bright', 'documents',cache_dir='cache')[TARGET]
+        doc_ids = []
+        documents = []
+        for dp in doc_pairs:
+            doc_ids.append(dp['id'])
+            documents.append(dp['content'])
 
-    train_dataset = dataset
-    test_dataset = dataset
+        train_dataset = dataset
+        test_dataset = dataset
 
-    instruction_following = "Let's think step by step and output the final answer after \"####\"."
+        instruction_following = "Let's think step by step and output the final answer after \"<query>\"."
 
-    # add a row to each data item that represents a unique id
-    def make_map_fn(split):
+        # add a row to each data item that represents a unique id
+        def make_map_fn(split):
 
-        def process_fn(example, idx):
-            query = example['query']
-            qid=example["id"]
-            excluded_ids=example['excluded_ids']
-            gold_ids=example['gold_ids']
-            assert len(set(excluded_ids).intersection(gold_ids))==0
-            question = query + ' ' + instruction_following
-            solution = {
-                "qrels":{qid:{}}
-            }
-            for gold_id in gold_ids:
-                solution['qrels'][qid][gold_id]=1
-            #print(solution['qrels'])
-            evaluator=pytrec_eval.RelevanceEvaluator(solution['qrels'],["ndcg_cut.10"])
-            data = {
-                "data_source": f"BRIGHT_bm25_reasoner_{TARGET}",
-                "prompt": [{
-                    "role": "user",
-                    "content": question,
-                }],
-                "ability": "math",
-                "reward_model": {
-                    "style": "rule",
-                    "ground_truth": solution
-                },
-                "extra_info": {
-                    'split':split,
-                    "idx":idx,
-                    'query': query,
-                    'qid': qid
+            def process_fn(example, idx):
+                query = example['query']
+                qid=example["id"]
+                excluded_ids=example['excluded_ids']
+                gold_ids=example['gold_ids']
+                assert len(set(excluded_ids).intersection(gold_ids))==0
+                question = query + ' ' + instruction_following
+                solution = {
+                    "qrels":{qid:{}}
                 }
-            }
+                for gold_id in gold_ids:
+                    solution['qrels'][qid][gold_id]=1
+                solution=json.dumps(solution)
+                #print(solution['qrels'])
+                #evaluator=pytrec_eval.RelevanceEvaluator(solution['qrels'],["ndcg_cut.10"])
+                data = {
+                    "data_source": f"BRIGHT_bm25_reasoner_{TARGET}",
+                    "prompt": [{
+                        "role": "user",
+                        "content": question,
+                    }],
+                    "ability": "math",
+                    "reward_model": {
+                        "style": "rule",
+                        "ground_truth": solution
+                    },
+                    "extra_info": {
+                        'split':split,
+                        "idx":idx,
+                        'query': query,
+                        'qid': qid
+                    }
+                }
 
-            return data
+                return data
 
-        return process_fn
+            return process_fn
 
-    train_dataset = train_dataset.map(function=make_map_fn('train'), with_indices=True)
-    test_dataset = test_dataset.map(function=make_map_fn('test'), with_indices=True)
+        train_dataset = train_dataset.map(function=make_map_fn('train'), with_indices=True)
+        datasets_full_train.append(train_dataset)
+        test_dataset = test_dataset.map(function=make_map_fn('test'), with_indices=True)
+        datasets_full_test.append(test_dataset)
+        #import pdb;pdb.set_trace()
 
-    local_dir = args.local_dir+"/"+TARGET
+    local_dir = args.local_dir+"/full"
     hdfs_dir = args.hdfs_dir
-
-    train_dataset.to_parquet(os.path.join(local_dir, 'train.parquet'))
-    test_dataset.to_parquet(os.path.join(local_dir, 'test.parquet'))
+    datasets_full_train=concatenate_datasets(datasets_full_train)
+    datasets_full_test=concatenate_datasets(datasets_full_test)
+    datasets_full_train.to_parquet(os.path.join(local_dir, 'train.parquet'))
+    datasets_full_test.to_parquet(os.path.join(local_dir, 'test.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
