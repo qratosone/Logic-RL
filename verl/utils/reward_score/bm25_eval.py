@@ -21,6 +21,7 @@ import datasets
 import pytrec_eval
 class BM25_Retriever:
     def __init__(self,target=''):
+        print("init bm25 retriever:",target)
         self.analyzer=analysis.Analyzer(analysis.get_lucene_analyzer())
         doc_pairs = datasets.load_dataset('xlangai/bright', 'documents',cache_dir='cache')[target]
         self.doc_ids = []
