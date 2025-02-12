@@ -176,7 +176,7 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
         results=retriever.retrieval_bm25_with_reasoner(qid,query)
         scores=evaluator.evaluate(results)
         full_metrics+=scores[qid]['ndcg_cut_10']
-    full_metrics/=len(query)
+    #full_metrics/=len(query)
     print('ndcg@10:',full_metrics)
     print("Actual metrics:",full_metrics)
     return full_metrics/len(qrels)+format_score

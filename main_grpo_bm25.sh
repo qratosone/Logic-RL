@@ -1,19 +1,10 @@
 set -x
-<<<<<<< HEAD
-MODEL_PATH_BASE=/home/qinxubo/data/pretrained_models/
-MODEL_NAME=Qwen2.5-1.5B-Instruct
-MODEL_PATH=$MODEL_PATH_BASE$MODEL_NAME
-TRAIN_DATA=/home/qinxubo/data/reasoning_ranker/Logic-RL/data/bm25_eval/full/train.parquet
-TEST_DATA=/home/qinxubo/data/reasoning_ranker/Logic-RL/data/bm25_eval/full/test.parquet
-export CUDA_VISIBLE_DEVICES=3,4,6,7
-=======
 MODEL_PATH_BASE=/root/autodl-tmp/pretrained_models/
 MODEL_NAME=Qwen2.5-7B-Instruct
 MODEL_PATH=$MODEL_PATH_BASE$MODEL_NAME
 TRAIN_DATA=data/bm25_eval/full/train.parquet
 TEST_DATA=data/bm25_eval/full/test.parquet
 #export CUDA_VISIBLE_DEVICES=3,4,6,7
->>>>>>> bb45873 (update)
 export VLLM_ATTENTION_BACKEND=XFORMERS
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -22,11 +13,7 @@ python3 -m verl.trainer.main_ppo \
     data.train_batch_size=4 \
     data.val_batch_size=4 \
     data.max_prompt_length=8000 \
-<<<<<<< HEAD
     data.max_response_length=500 \
-=======
-    data.max_response_length=200 \
->>>>>>> bb45873 (update)
     actor_rollout_ref.model.path=$MODEL_PATH\
     actor_rollout_ref.actor.optim.lr=3e-7 \
     actor_rollout_ref.model.use_remove_padding=True \
