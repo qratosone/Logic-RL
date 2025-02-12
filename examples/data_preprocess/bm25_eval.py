@@ -51,8 +51,7 @@ if __name__ == '__main__':
         dataset=dataset.filter(lambda example: len(example['query']) >= 6000)
         train_dataset = dataset
         test_dataset = dataset
-
-        #instruction_following = "Let's think step by step and output the final answer after \"<query>\"."
+        # add a row to each data item that represents a unique id
         def make_map_fn(split):
 
             def process_fn(example, idx):
@@ -61,7 +60,7 @@ if __name__ == '__main__':
                 excluded_ids=example['excluded_ids']
                 gold_ids=example['gold_ids']
                 assert len(set(excluded_ids).intersection(gold_ids))==0
-                question = f"""<|im_start|>system\nYou are a helpful assistant. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and<answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>.  Now the user asks you to generate a query with the given question. The query will be used for text retrieval to retrieve the correct to the query. After thinking, when you finally reach a conclusion, clearly state the identity of each character within <answer> </answer> tags. i.e., <answer> The query content </answer>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
+                question = f"""<|im_start|>system\nYou are a helpful assistant. Now the user asks you to generate a query with the given question. The query will be used for text retrieval to retrieve the correct to the query. The reasoning process and the generated query are enclosed within <think> </think> and <query> </query> tags, respectively, i.e., <think> reasoning process here </think><query> the generated query here </query>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
                 solution = {
                     "qrels":{qid:{}}
                 }

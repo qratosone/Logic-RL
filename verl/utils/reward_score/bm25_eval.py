@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
+import json,re
 from pyserini import analysis
 from gensim.corpora import Dictionary
 from gensim.models import LuceneBM25Model
@@ -83,8 +83,8 @@ def validate_response_structure(processed_str: str) -> bool:
     tags = {
         'think_start': ('<think>', 1),
         'think_end': ('</think>', 1),
-        'answer_start': ('<answer>', 1),
-        'answer_end': ('</answer>', 1)
+        'answer_start': ('<query>', 1),
+        'answer_end': ('</query>', 1)
     }
 
     positions = {}
@@ -102,13 +102,40 @@ def validate_response_structure(processed_str: str) -> bool:
     if (positions['think_start'] > positions['think_end'] or
         positions['think_end'] > positions['answer_start'] or
         positions['answer_start'] > positions['answer_end']):
-        print("  [Error] Incorrect tag order: Expected <think>...</think><answer>...</answer>")
+        print("  [Error] Incorrect tag order: Expected <think>...</think><query>...</query>")
         validation_passed = False
     else:
         print("  Tag sequence validation passed")
 
     return validation_passed
+def extract_solution(solution_str):
+    """Extracts the final answer from the model's response string.
+    
+    Args:
+        solution_str: Raw response string from the language model
+        
+    Returns:
+        Tuple containing (extracted_answer, processed_string)
+    """
+    # Split response to isolate assistant output
+    if "Assistant:" in solution_str:
+        processed_str = solution_str.split("Assistant:", 1)[1]
+    elif "<|im_start|>assistant" in solution_str:
+        processed_str = solution_str.split("<|im_start|>assistant", 1)[1]
+    else:
+        print("[Error] Failed to locate model response header")
+        return None, solution_str
 
+    # Extract final answer using XML-style tags
+    answer_pattern = r'<query>(.*?)</query>'
+    matches = list(re.finditer(answer_pattern, processed_str, re.DOTALL))
+    
+    if not matches:
+        print("[Error] No valid query tags found")
+        return None, processed_str
+        
+    final_answer = matches[-1].group(1).strip()
+    return final_answer, processed_str
 def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     """The scoring function for GSM8k.
 
@@ -121,16 +148,17 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
         format_score: the score for the format
         score: the score for the correct answer
     """
+    query, solution_str = extract_solution(solution_str)
+    print(f"\n[Model Response]\n{solution_str}")
     format_correct = validate_response_structure(solution_str)
     format_score = format_reward if format_correct else -abs(format_reward)
     print(f"\n  Format validation: {'PASS' if format_correct else 'FAIL'}")
     print(f"  Format score: {format_score}")
     #if not format_correct:
     #    return format_score
-    if '<answer>' not in solution_str:
-        results_output=solution_str
-    else:
-        results_output=solution_str.split('<answer>')[1].strip('</answer>')[0]
+    if query is None:
+        query=solution_str
+    print("query:",query)
     qrels=json.loads(ground_truth)['qrels']
     qrels_filtered={}
     for qid in qrels:
@@ -145,11 +173,10 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     full_metrics=0
     retriever=retriever_full.retriever_map[data_source]
     for qid in qrels_filtered:
-        results=retriever.retrieval_bm25_with_reasoner(qid,results_output)
+        results=retriever.retrieval_bm25_with_reasoner(qid,query)
         scores=evaluator.evaluate(results)
         full_metrics+=scores[qid]['ndcg_cut_10']
-    full_metrics/=len(results_output)
+    full_metrics/=len(query)
     print('ndcg@10:',full_metrics)
     print("Actual metrics:",full_metrics)
-    print(results_output)
     return full_metrics/len(qrels)+format_score
