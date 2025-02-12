@@ -29,6 +29,7 @@ import pytrec_eval
 
 import json
 import random
+max_len=0
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_dir', default='data/bm25_eval')
@@ -38,10 +39,11 @@ if __name__ == '__main__':
 
     datasets_full_train=[]
     datasets_full_test=[]
+    
     #data_source = load_dataset('BRIGHT/', 'examples',cache_dir=args.cache_dir)[args.task]
-    for TARGET in ['biology','earth_science','economics','pony','psychology','robotics',
-                                 'stackoverflow','sustainable_living','aops','leetcode','theoremqa_theorems',
-                                 'theoremqa_questions']:
+    for TARGET in ['biology','earth_science','economics','pony','psychology',
+                                 'sustainable_living','aops','theoremqa_theorems',
+                                 'theoremqa_questions']: #'stackoverflow','leetcode','robotics',
         dataset = datasets.load_dataset('BRIGHT/', 'examples',cache_dir='cache')[TARGET]
         doc_pairs = datasets.load_dataset('BRIGHT/', 'documents',cache_dir='cache')[TARGET]
         doc_ids = []
@@ -50,7 +52,14 @@ if __name__ == '__main__':
             doc_ids.append(dp['id'])
             documents.append(dp['content'])
         sampled_document=documents[0]
-        dataset=dataset.filter(lambda example: len(example['query']) >= 6000)
+        #print(len(sampled_document))
+        #if len(sampled_document)>400:
+        #    print(TARGET)
+        #dataset=dataset.filter(lambda example: len(example['query']) >= 8000)
+        max_query_length=max([len(example['query']) for example in dataset])
+        print(max_query_length)
+        if max_query_length>8000:
+            print(TARGET)
         train_dataset = dataset
         test_dataset = dataset
         # add a row to each data item that represents a unique id
@@ -62,7 +71,7 @@ if __name__ == '__main__':
                 excluded_ids=example['excluded_ids']
                 gold_ids=example['gold_ids']
                 assert len(set(excluded_ids).intersection(gold_ids))==0
-                question = f"""<|im_start|>system\nYou are a helpful assistant. Now the user asks you to generate a query with the given question. The query will be used for BM25-based text retrieval to retrieve the correct to the query. Here is a sample of the candidate documents: {sampled_document}.\n The reasoning process and the generated query are enclosed within <think> </think> and <query> </query> tags, respectively, i.e., <think> reasoning process here </think><query> the generated query here </query>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
+                question = f"""<|im_start|>system\nYou are a helpful assistant. Now the user asks you to generate a query with the given question. The query will be used for text retrieval to retrieve the correct to the query. \n The reasoning process and the generated query are enclosed within <think> </think> and <query> </query> tags, respectively, i.e., <think> reasoning process here </think><query> the generated query here </query>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
                 solution = {
                     "qrels":{qid:{}}
                 }
@@ -104,8 +113,12 @@ if __name__ == '__main__':
 
     local_dir = args.local_dir+"/full"
     hdfs_dir = args.hdfs_dir
+    
     datasets_full_train=concatenate_datasets(datasets_full_train)
     datasets_full_test=concatenate_datasets(datasets_full_test)
+    #datasets_full_train=datasets_full_train.filter(lambda example: len(example['prompt'][0]['content']) >= 12000)
+    #datasets_full_test=datasets_full_test.filter(lambda example: len(example['prompt'][0]['content']) >= 8000)
+    print("final results:",len(datasets_full_train))
     datasets_full_train.to_parquet(os.path.join(local_dir, 'train.parquet'))
     datasets_full_test.to_parquet(os.path.join(local_dir, 'test.parquet'))
 

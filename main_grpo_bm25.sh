@@ -37,7 +37,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['wandb'] \
     trainer.project_name='GRPO_BRIGHT_full_bm25_autodl' \
-    trainer.experiment_name=0212_bugfix_$MODEL_NAME \
+    trainer.experiment_name=0212_bugfix_sampledoc_$MODEL_NAME \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.default_local_dir=save_models \
