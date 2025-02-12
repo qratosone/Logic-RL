@@ -28,6 +28,7 @@ import pytrec_eval
                                  '''
 
 import json
+import random
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_dir', default='data/bm25_eval')
@@ -48,6 +49,7 @@ if __name__ == '__main__':
         for dp in doc_pairs:
             doc_ids.append(dp['id'])
             documents.append(dp['content'])
+        sampled_document=documents[0]
         dataset=dataset.filter(lambda example: len(example['query']) >= 6000)
         train_dataset = dataset
         test_dataset = dataset
@@ -60,7 +62,7 @@ if __name__ == '__main__':
                 excluded_ids=example['excluded_ids']
                 gold_ids=example['gold_ids']
                 assert len(set(excluded_ids).intersection(gold_ids))==0
-                question = f"""<|im_start|>system\nYou are a helpful assistant. Now the user asks you to generate a query with the given question. The query will be used for text retrieval to retrieve the correct to the query. The reasoning process and the generated query are enclosed within <think> </think> and <query> </query> tags, respectively, i.e., <think> reasoning process here </think><query> the generated query here </query>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
+                question = f"""<|im_start|>system\nYou are a helpful assistant. Now the user asks you to generate a query with the given question. The query will be used for BM25-based text retrieval to retrieve the correct to the query. Here is a sample of the candidate documents: {sampled_document}.\n The reasoning process and the generated query are enclosed within <think> </think> and <query> </query> tags, respectively, i.e., <think> reasoning process here </think><query> the generated query here </query>.\n<|im_end|>\n<|im_start|>user\n{query}\n<|im_end|>\n<|im_start|>assistant\n<think>"""
                 solution = {
                     "qrels":{qid:{}}
                 }

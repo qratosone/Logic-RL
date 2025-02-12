@@ -158,7 +158,7 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     #    return format_score
     if query is None:
         query=solution_str
-    print("query:",query)
+    print("[Query Generated]:",query)
     qrels=json.loads(ground_truth)['qrels']
     qrels_filtered={}
     for qid in qrels:
