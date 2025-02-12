@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json,re
+import json,re,os
+import numpy as np
 from sentence_transformers import SentenceTransformer
 import datasets
 import pytrec_eval
+from sklearn.metrics.pairwise import cosine_similarity
 def get_scores(query_ids,doc_ids,scores,excluded_ids):
     assert len(scores)==len(query_ids),f"{len(scores)}, {len(query_ids)}"
     assert len(scores[0])==len(doc_ids),f"{len(scores[0])}, {len(doc_ids)}"
@@ -34,52 +36,48 @@ def get_scores(query_ids,doc_ids,scores,excluded_ids):
             emb_scores[str(query_id)][pair[0]] = pair[1]
     return emb_scores
 class BGE_Retriever:
-    def __init__(self,path="",target='',cache='./cache'):
-        self.analyzer=analysis.Analyzer(analysis.get_lucene_analyzer())
+    def __init__(self,target='',cache='./cache'):
         doc_pairs = datasets.load_dataset('BRIGHT/', 'documents',cache_dir='cache')[target]
         self.doc_ids = []
         self.documents = []
         for dp in doc_pairs:
             self.doc_ids.append(dp['id'])
             self.documents.append(dp['content'])
-        corpus = [self.analyzer.analyze(x) for x in self.documents]
-        self.dictionary = Dictionary(corpus)
-        self.model = LuceneBM25Model(dictionary=self.dictionary, k1=0.9, b=0.4)
-        bm25_corpus = self.model[list(map(self.dictionary.doc2bow, corpus))]
-        self.bm25_index = SparseMatrixSimilarity(bm25_corpus, num_docs=len(corpus), num_terms=len(self.dictionary), normalize_queries=False, normalize_documents=False)
+        self.model=SentenceTransformer('/root/autodl-tmp/pretrained_models/bge-base-en-v1.5')
+        batch_size = 2048
+        if not os.path.isdir(os.path.join(cache, 'doc_emb', target, f"long_{False}_128")):
+            os.makedirs(os.path.join(cache, 'doc_emb', target, f"long_{False}_128"))
+        cur_cache_file = os.path.join(cache, 'doc_emb', target, f"long_{False}_128", f'0.npy')
+        if os.path.isfile(cur_cache_file):
+            print("load cache file:",cur_cache_file)
+            self.doc_emb = np.load(cur_cache_file,allow_pickle=True)
+        else:
+            print("building cache of ",target)
+            self.doc_emb = self.model.encode(self.documents, show_progress_bar=True, batch_size=batch_size, normalize_embeddings=True)
+            np.save(cur_cache_file, self.doc_emb)
         examples = datasets.load_dataset('BRIGHT/', 'examples',cache_dir='cache')[target]
         self.excluded_ids = {}
         for e in examples:
             self.excluded_ids[e['id']] = e['excluded_ids']
             overlap = set(e['excluded_ids']).intersection(set(e['gold_ids']))
             assert len(overlap)==0
-    def retrieval_bm25_with_reasoner(self,query_id,query):
-        all_scores = {}
-        query = self.analyzer.analyze(query)
-        bm25_query = self.model[self.dictionary.doc2bow(query)]
-        similarities = self.bm25_index[bm25_query].tolist()
-        all_scores[str(query_id)] = {}
-        for did, s in zip(self.doc_ids, similarities):
-            all_scores[str(query_id)][did] = s
-        for did in set(self.excluded_ids[str(query_id)]):
-            if did!="N/A":
-                all_scores[str(query_id)].pop(did)
-        cur_scores = sorted(all_scores[str(query_id)].items(),key=lambda x:x[1],reverse=True)[:1000]
-        all_scores[str(query_id)] = {}
-        for pair in cur_scores:
-            all_scores[str(query_id)][pair[0]] = pair[1]
-        return all_scores
+    def retrieval_bge_with_reasoner(self,query_id,query):
+        queries=[query]
+        query_emb = self.model.encode(queries,show_progress_bar=False,batch_size=1, normalize_embeddings=True)
+        scores = cosine_similarity(query_emb, self.doc_emb)
+        scores = scores.tolist()
+        return get_scores(query_ids=[query_id],doc_ids=self.doc_ids,scores=scores,excluded_ids=self.excluded_ids)
 class Retriever_Full:
     def __init__(self):
-        tasks=['biology','earth_science','economics','pony','psychology','robotics',
-                                 'stackoverflow','sustainable_living','aops','leetcode','theoremqa_theorems',
+        tasks=['biology','earth_science','economics','pony','psychology',
+                                 'sustainable_living','aops','theoremqa_theorems',
                                  'theoremqa_questions']
         self.retriever_map={}
         for task in tasks:
             key=f"BRIGHT_bm25_reasoner_{task}"
-            self.retriever_map[key]=BM25_Retriever(task)
-    def retrieval_bm25_with_reasoner(self,query_id,query,data_source):
-        return self.retriever_map[data_source].retrieval_bm25_with_reasoner(query_id,query)
+            self.retriever_map[key]=BGE_Retriever(task)
+    def retrieval_bge_with_reasoner(self,query_id,query,data_source):
+        return self.retriever_map[data_source].retrieval_bge_with_reasoner(query_id,query)
 retriever_full=Retriever_Full()
 def validate_response_structure(processed_str: str) -> bool:
     """Performs comprehensive validation of response structure.
@@ -187,7 +185,7 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     full_metrics=0
     retriever=retriever_full.retriever_map[data_source]
     for qid in qrels_filtered:
-        results=retriever.retrieval_bm25_with_reasoner(qid,query)
+        results=retriever.retrieval_bge_with_reasoner(qid,query)
         scores=evaluator.evaluate(results)
         full_metrics+=scores[qid]['ndcg_cut_10']
     #full_metrics/=len(query)

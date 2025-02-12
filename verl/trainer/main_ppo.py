@@ -17,7 +17,7 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 
 from verl import DataProto
 import torch
-from verl.utils.reward_score import gsm8k, math, multiply, countdown, kk,bm25_eval
+from verl.utils.reward_score import gsm8k, math, multiply, countdown, kk,bge_eval
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 
 
@@ -33,7 +33,7 @@ def _select_rm_score_fn(data_source):
     elif "kk" in data_source:
         return kk.compute_score
     elif 'bm25_reasoner' in data_source:
-        return bm25_eval.compute_score
+        return bge_eval.compute_score
     else:
         raise NotImplementedError
 
@@ -80,9 +80,6 @@ class RewardManager():
             # select rm_score
             data_source = data_item.non_tensor_batch['data_source']
             compute_score_fn = _select_rm_score_fn(data_source)
-            print(sequences_str)
-            print(ground_truth)
-            print(data_source)
             score = compute_score_fn(solution_str=sequences_str, ground_truth=ground_truth,data_source=data_source)
             reward_tensor[i, valid_response_length - 1] = score
 
@@ -91,7 +88,6 @@ class RewardManager():
 
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print(sequences_str)
 
         return reward_tensor
 
