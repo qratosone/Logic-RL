@@ -79,7 +79,8 @@ class Retriever_Full:
             self.retriever_map[key]=BGE_Retriever(task)
     def retrieval_bge_with_reasoner(self,query_id,query,data_source):
         return self.retriever_map[data_source].retrieval_bge_with_reasoner(query_id,query)
-retriever_full=Retriever_Full()
+base_path='/home/qinxubo/data' if os.path.exists('/home/qinxubo/data') else "/root/autodl-tmp"
+model=SentenceTransformer(f'{base_path}/pretrained_models/bge-base-en-v1.5')
 def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     """The scoring function for GSM8k.
 
@@ -97,25 +98,14 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
     if "<|im_start|>assistant" in query:
         query = query.split("<|im_start|>assistant", 1)[1]
     print("[Query Generated]:",query)
-    qrels=json.loads(ground_truth)['qrels']
-    qrels_filtered={}
-    for qid in qrels:
-        if qrels[qid] is not None:
-            qrels_filtered[qid]=qrels[qid]
-    for qid in qrels_filtered:
-        for doc in qrels_filtered[qid]:
-            qrels_filtered[qid][doc]=int(qrels_filtered[qid][doc])
-    assert len(qrels_filtered)==1
-    evaluator=pytrec_eval.RelevanceEvaluator(qrels_filtered,["ndcg_cut.10"])
-    #answer = extract_solution(solution_str=solution_str, method=method)
-    full_metrics=0
-    retriever=retriever_full.retriever_map[data_source]
-    for qid in qrels_filtered:
-        results=retriever.retrieval_bge_with_reasoner(qid,query)
-        scores=evaluator.evaluate(results)
-        full_metrics+=scores[qid]['ndcg_cut_10']
-    #full_metrics/=len(query)
-    print('ndcg@10:',full_metrics)
-    print("Actual metrics:",full_metrics)
-    
-    return full_metrics/len(qrels_filtered)
+    label_item=json.loads(ground_truth)
+    question=label_item['query']
+    docs=label_item['pos_docs_list']
+    question_emb=model.encode([question],normalize_embeddings=True)
+    query_emb=model.encode([query],normalize_embeddings=True)
+    doc_emb=model.encode(docs, normalize_embeddings=True)
+    original_sim=question_emb @ doc_emb.T
+    query_sim=query_emb@doc_emb.T
+    advantage=np.sum(query_sim-original_sim).tolist()
+    print("Got Advantage:",advantage)
+    return advantage
