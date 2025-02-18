@@ -93,11 +93,11 @@ def compute_score(solution_str, ground_truth, data_source,format_reward=1):
         format_score: the score for the format
         score: the score for the correct answer
     """
-    print(solution_str)
+    #print(solution_str)
     query=solution_str
     if "<|im_start|>assistant" in query:
         query = query.split("<|im_start|>assistant", 1)[1]
-    print("[Query Generated]:",query)
+    #print("[Query Generated]:",query)
     label_item=json.loads(ground_truth)
     question=label_item['query']
     docs=label_item['pos_docs_list']
