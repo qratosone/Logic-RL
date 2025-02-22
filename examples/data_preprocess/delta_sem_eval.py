@@ -24,16 +24,6 @@ import argparse
 from tqdm import tqdm
 import pytrec_eval
 from langchain.prompts import PromptTemplate
-PROMPT_BASE='''
-**Task**:  
-Given a question and a candidate documents that answer it through causal reasoning (e.g., explanations of causes, effects, or mechanisms), generate a concise query optimized for semantic retrieval. The query must:  
-1. Reflect the semantic intent of the question (e.g., key entities, relationships, or goals).  
-2. Implicitly align with the causal logic embedded in the documents, even if the question and documents lack direct semantic overlap.  
-**Begin**:  
-Question: {question}  
-Document: {document}  
-Query:'''
-TEMPLATE=PromptTemplate(input_variables=["question", "documents"],template=PROMPT_BASE)
 import json
 import random
 max_len=0
@@ -86,11 +76,11 @@ if __name__ == '__main__':
                 #print(doc_sample)
                 #full_prompt=TEMPLATE.format(question=query,document=doc_sample)
                 #assert len(full_prompt)<6000
-                prompt = (f'{query}\n\n'
-                  f'Instructions:\n'
+                prompt = (f'Instructions:\n'
                   f'1. Identify the essential problem.\n'
                   f'2. Think step by step to reason and describe what information could be relevant and helpful to address the questions in detail.\n'
-                  f'3. Draft an answer with as many thoughts as you have.\n')
+                  f'3. Draft an answer with as many thoughts as you have.\n'
+                  f'Query:{query}\n\n')
                 assert len(set(excluded_ids).intersection(gold_ids))==0
                 question = f"""<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\n{prompt}\n<|im_end|>\n<|im_start|>assistant\n"""
                 solution = {
